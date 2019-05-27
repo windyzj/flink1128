@@ -11,7 +11,8 @@ import org.apache.flink.streaming.connectors.elasticsearch6.ElasticsearchSink
 import org.apache.http.HttpHost
 import org.elasticsearch.action.index.IndexRequest
 import org.elasticsearch.client.Requests
-
+import org.json4s.native.JsonMethods
+import org.json4s.JsonDSL._
 
 object MyEsUtil {
 
@@ -20,21 +21,27 @@ object MyEsUtil {
   httpHostList.add(new HttpHost("hadoop2",9200))
   httpHostList.add(new HttpHost("hadoop3",9200))
 
-  def getEsSink(indexName:String): ElasticsearchSink[String]  ={
+  def getEsSink(indexName:String): ElasticsearchSink[StartUpLog]  ={
 
-    val esFunc = new ElasticsearchSinkFunction[String] {
-      override def process(element: String, ctx: RuntimeContext, indexer: RequestIndexer): Unit = {
+    val esFunc = new ElasticsearchSinkFunction[StartUpLog] {
+      override def process(element: StartUpLog, ctx: RuntimeContext, indexer: RequestIndexer): Unit = {
+        val list: List[(String, Long)] = List[(String, Long)]()
+        implicit val formats = org.json4s.DefaultFormats
+        val jsonstr2: String = org.json4s.native.Serialization.write(element)
+     //   val jsonStr: String = JSON.toJSONString(element,SerializerFeature.)
+//
+        val jSONObject: JSONObject = JSON.parseObject(jsonstr2)
+         println(element)
 
-        val jSONObject: JSONObject = JSON.parseObject(element)
 
-        val indexRequest: IndexRequest = Requests.indexRequest().index(indexName).`type`("_doc").source(jSONObject)
+        val indexRequest: IndexRequest = Requests.indexRequest().index(indexName).`type`("_doc").source(element)
         indexer.add(indexRequest)
       }
     }
 
 
 
-     val esSinkBuilder = new  ElasticsearchSink.Builder[String](httpHostList,esFunc)
+     val esSinkBuilder = new  ElasticsearchSink.Builder[StartUpLog](httpHostList,esFunc)
 
      esSinkBuilder.setBulkFlushMaxActions(10)
 

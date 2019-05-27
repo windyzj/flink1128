@@ -19,13 +19,16 @@ object BatchWcApp {
     //source
     val dataSet: DataSet[String] = env.readTextFile(inputPath)
 
+    dataSet.print()
     //transform
-     val aggDataSet: AggregateDataSet[(String, Int)] = dataSet.flatMap(_.split(" ")).map((_,1)).groupBy(0).sum(1)
+   //  val aggDataSet: AggregateDataSet[(String, Int)] = dataSet.flatMap(_.split(" ")).map((_,1)).groupBy(0).sum(1)
 
     //sink
-    aggDataSet.writeAsCsv(outputPath).setParallelism(1)
+    //aggDataSet.writeAsCsv(outputPath).setParallelism(1)
 
-    env.execute()
+    //env.execute()
+
+
 
   }
 

@@ -2,11 +2,13 @@ package com.atguigu.flink1128
 
 import com.alibaba.fastjson.JSON
 import com.atguigu.flink1128.bean.StartUpLog
-import com.atguigu.flink1128.util.{MyEsUtil, MyRedisUtil, MykafkaUtil}
+import com.atguigu.flink1128.util.{MyEsUtil, MyJdbcSink, MyRedisUtil, MykafkaUtil}
 import org.apache.flink.api.java.tuple.Tuple
-import org.apache.flink.streaming.api.scala.{ConnectedStreams, DataStream, KeyedStream, SplitStream, StreamExecutionEnvironment}
+import org.apache.flink.streaming.api.scala.{ConnectedStreams, DataStream, KeyedStream, SplitStream, StreamExecutionEnvironment, WindowedStream}
 import org.apache.flink.streaming.connectors.kafka.{FlinkKafkaConsumer011, FlinkKafkaProducer011}
 import org.apache.flink.api.scala._
+import org.apache.flink.streaming.api.windowing.time.Time
+import org.apache.flink.streaming.api.windowing.windows.{GlobalWindow, TimeWindow}
 import org.apache.flink.streaming.connectors.elasticsearch6.ElasticsearchSink
 import org.apache.flink.streaming.connectors.redis.RedisSink
 
@@ -18,14 +20,16 @@ object GmallLogApp {
 
       val consumer: FlinkKafkaConsumer011[String] = MykafkaUtil.getKafkaConsumer("GMALL_STARTUP")
       val startupDstream: DataStream[String] = env.addSource(consumer)
+ //   startupDstream.print()
+
+//    val startupCountDstream: DataStream[(String, Int)] = startupDstream.map { jsonString =>
+//      val startUpLog: StartUpLog = JSON.parseObject(jsonString, classOf[StartUpLog])
+//
+//      (startUpLog.ch, 1)
+//    }
+//     val groupbyChStream: KeyedStream[(String, Int), Tuple] = startupCountDstream.keyBy(0)
 
 
-    val startupCountDstream: DataStream[(String, Int)] = startupDstream.map { jsonString =>
-      val startUpLog: StartUpLog = JSON.parseObject(jsonString, classOf[StartUpLog])
-
-      (startUpLog.ch, 1)
-    }
-//    val groupbyChStream: KeyedStream[(String, Int), Tuple] = startupCountDstream.keyBy(0)
 //
 //    val chCountDstream: DataStream[(String, Int)] = groupbyChStream.reduce { (ch1, ch2) =>
 //      val ch: String = ch1._1
@@ -77,9 +81,30 @@ object GmallLogApp {
 //    groupbyCountryDstream.addSink(redisSink)
 
     //把明细保存到ES 中
-    val esSink: ElasticsearchSink[String] = MyEsUtil.getEsSink("gmall1128_startup_flink")
-    startupDstream.addSink(esSink)
-    
+   // val esSink: ElasticsearchSink[StartUpLog] = MyEsUtil.getEsSink("gmall1128_startup_flink2")
+   // startupLogDstream.print()
+    //startupLogDstream.addSink(esSink)
+
+
+    val myJdbcSink = new MyJdbcSink("insert into  z_startup  values(?,?,?,?,?)")
+    val startupForJdbcDstream: DataStream[Array[Any]] = startupLogDstream.map(startuplog=>Array(startuplog.mid,startuplog.ch,startuplog.area,startuplog.vs,startuplog.uid))
+    startupForJdbcDstream.addSink(myJdbcSink)
+
+
+    // 每10秒钟统计各个渠道的个数
+    val startupCountDstream: DataStream[(String, Int)] = startupDstream.map { jsonString =>
+      val startUpLog: StartUpLog = JSON.parseObject(jsonString, classOf[StartUpLog])
+
+      (startUpLog.ch, 1)
+    }
+    val groupbyChStream: KeyedStream[(String, Int), Tuple] = startupCountDstream.keyBy(0)
+    //val windowStream: WindowedStream[(String, Int), Tuple, TimeWindow] = groupbyChStream.timeWindow(Time.seconds(10L),Time.seconds(2L))
+
+    val windowStream: WindowedStream[(String, Int), Tuple, GlobalWindow] = groupbyChStream.countWindow(10,2)
+
+    val chCountByWindowDstream: DataStream[(String, Int)] = windowStream.sum(1)
+
+    chCountByWindowDstream.print()
     env.execute()
 
   }
